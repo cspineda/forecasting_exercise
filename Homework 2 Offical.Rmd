@@ -1,0 +1,343 @@
+---
+title: "Homework 2"
+author: "Cris"
+date: "3/5/2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(fBasics)
+library(forecast) 
+library(fGarch)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(car)
+library(VIF)
+library(corrplot)
+library(zoo)
+```
+
+```{r}
+data<-read.csv("/Users/cris/Desktop/Courses/Second Semester/Forecasting/Homework 2/Homework 2. DATA.csv",header=TRUE,sep=";",dec=",")
+
+colnames(data)[colnames(data)=="Long.term.rate..."] <- "Long.term.rate"
+data$Long.term.rate = as.numeric(data$Long.term.rate)
+
+train = data[1:105,2]
+test = data[106:109,2]
+```
+
+*QUESTION 1*
+1.	Find the best time series model for the variable "ibex"*
+
+Explore IBX
+```{r}
+ts.plot(train) # mu != 0, mu != structured, var = structured
+
+nlags=60 
+par(mfrow=c(2,1))
+acf(train,nlags) # multiple lags
+pacf(train,nlags) # lag 1
+
+s = 4
+nsdiffs(train,m=s,test=c("ocsb"))  # 1 difference but wont use
+ndiffs(train, alpha=0.05, test=c("adf")) # 1 difference
+```
+
+```{r}
+r=diff(log(train))
+par(mfrow=c(3,1))
+ts.plot(r)
+acf(r,60)
+pacf(r,60) 
+
+# To check for WN if ACF and PACF have no lags
+## Ho: uncorrelated data - white noise
+## H1: correlated data
+Box.test(r,lag=20) # uncorrelated
+
+# check for GWN
+shapiro.test(r) #GWN
+```
+
+
+Linear Model 1
+```{r}
+# estimate model with 1 normal difference
+fit1<-arima(train,order=c(0,1,0),seasonal=list(order=c(0,0,0),period=s)) 
+fit1
+
+ts.plot(fit1$residuals) # mu = 0, mu = stationary, var = stationary
+par(mfrow=c(2,1))
+acf(fit1$residuals,nlags) # no structured
+pacf(fit1$residuals,nlags) # no structure 
+
+# looks like WN but lets make sure
+Box.test(fit1$residuals,nlags) # residuals are WN
+
+# check for GWN
+shapiro.test(fit1$residuals) # 0.48 GWN
+# we have GWN so no need for a non-Linear model
+```
+This is one of our models
+
+Predict
+```{r}
+# we will test the model with the recursive method
+fit1<-arima(train,order=c(0,1,0),seasonal=list(order=c(0,0,0),period=s))
+y.pred1<-predict(fit1,n.ahead=4)
+y.pred1$pred   # point predictions
+y.pred1$se    # standard errors
+
+# compare
+ts.plot(y.pred1$pred,col="blue",ylab="IBEX",
+     main = "ARIMA(0,1,0) Prediction vs Real")
+par(new=TRUE)
+ts.plot(test,col="red")
+
+fit1MSFE <- mean((y.pred1$pred-test)^2)
+```
+
+Linear Model 2
+```{r}
+# estimate model with AR[1]
+fit2<-arima(train,order=c(1,0,0),seasonal=list(order=c(0,0,0),period=s)) 
+fit2 # 3011 + 0.99
+
+ts.plot(fit2$residuals) # mu = 0, mu = stationary, var = stationary
+par(mfrow=c(2,1))
+acf(fit2$residuals,nlags) # no structured
+pacf(fit2$residuals,nlags) # no structure 
+
+# looks like WN but lets make sure
+Box.test(fit2$residuals,lag=60) # residuals are WN
+
+# check for GWN
+shapiro.test(fit2$residuals) # 0.4294 GWN
+# we have GWN so no need for a non-Linear model
+```
+This is our other model
+
+Predict
+```{r}
+fit2<-arima(train,order=c(1,0,0),seasonal=list(order=c(0,0,0),period=s))
+y.pred2<-predict(fit2,n.ahead=4)
+y.pred2$pred   # point predictions
+y.pred2$se    # standard errors
+
+# compare
+ts.plot(y.pred2$pred,col="blue",ylab="IBEX",
+     main = "AR[1] Prediction vs Real")
+par(new=TRUE)
+ts.plot(test,col="red")
+
+fit2MSFE <- mean((y.pred2$pred-test)^2)
+```
+
+```{r}
+# comparison
+cat("ARIMA(0,1,0) MSFE: ",fit1MSFE," AR[1] MSFE: ",fit2MSFE)
+```
+
+We can see that model 1 is better since it takes into effect the most recent values better.
+
+
+*Question 2*
+2.	Find the best regression model for the dependent variable "ibex".
+  a.	do we have multicollinearity with these explanatory        variables?
+  b.	Are the residuals White Noise?
+
+Create a quick linear model
+```{r}
+df = data[,2:5]
+```
+
+```{r}
+# plot the three explanatories
+par(mfrow=c(3,1))
+ts.plot(df$Short.term.rate,col="blue",ylab="% Rate", main = "Short Term Rate")
+ts.plot(df$Long.term.rate,col="blue",ylab="% Rate", main = "Long Term Rate")
+ts.plot(df$Exchange.rate,col="blue",ylab="% Rate", main = "Exchange Term Rate")
+
+#Correlation matrix
+corrdata <- cor(df[complete.cases(df),])
+round(corrdata, 2)
+par(family ='sans')
+corrplot(corrdata, method = 'number', tl.col = 'black', type = 'upper', tl.cex = 0.7, number.cex = 0.5)
+# Short term and Long term rate are correlated
+
+
+# linear model
+mymodel = lm(IBEX~., data=df)
+# I tried adding the interactions between each predictor variable but the interactions are significant so we will not include them
+summary(mymodel)
+# all are significant
+```
+
+Regression Model
+```{r}
+# plot exchange rate
+qplot(IBEX, Exchange.rate, data=df, geom="point") + geom_smooth(method="lm")
+# plot short term rate
+qplot(IBEX, Short.term.rate, data=df, geom="point") + geom_smooth(method="lm")
+# plot long term rate
+qplot(IBEX, Long.term.rate, data=df, geom="point") + geom_smooth(method="lm")
+# you can see that all the predictors are correlated
+
+# plot residuals
+qplot(predict(mymodel), rstandard(mymodel), geom="point") + geom_hline(yintercept=0, colour=I("blue"), alpha=I(0.5))
+# no pattern appears so we are good
+
+## checking for normality of residuals
+# histogram
+q1 = qplot(rstandard(mymodel), geom="blank", xlim=c(-4,4)) +
+  geom_histogram(aes(y=..density..), colour=I("gray"), binwidth=0.5)+
+  stat_function(fun=dnorm, args=list(mean=0, sd=1),
+                colour=I("red"), alpha=I(0.5))
+# qqplot
+q2 = qplot(sample=rstandard(mymodel)) +
+  geom_abline(slope=1,intercept=0)
+
+# both
+grid.arrange(q1, q2, nrow=1)
+# residuals dont look normally distributed but lets make sure
+
+# checking for independence of errors
+durbinWatsonTest(mymodel)
+# p-value = 0 so we reject that errors are not autocorrelated, so they are dependent
+
+# check for WN of the residuals
+ts.plot(mymodel$residuals) # mu != 0, mu != stationary, var = stationary
+par(mfrow=c(2,1))
+acf(mymodel$residuals,nlags) # cyclic lags
+pacf(mymodel$residuals,nlags) # 2 lags
+```
+The residuals of the regression model are not WN.
+
+Answers for Question 2:
+1. Yes, we have multicolinarity between all three regrressors
+2. The residuals are not WN
+
+*Question 3*
+3.	Find the best regression model with time series errors for the dependent variable "ibex"
+  a.	does this model maintain the same number of lags as the model found in question 1, and the same number of regressors as those found in question 2?
+  b.	Derive the final equation for the selected model
+
+
+We will use mymodel from question two and integrate time series errors
+```{r}
+# plot
+ts.plot(df$Long.term.rate,col="blue",ylab="percentage",
+     main = "US weekly interest rates (in percentage)")
+par(new=TRUE)
+ts.plot(df$IBEX,col="red")
+
+# check residuals again
+par(mfrow=c(3,1))
+ts.plot(mymodel$residuals) # mu != 0, mu != stationary, var = stationary
+acf(mymodel$residuals,nlags) # cyclic lags
+pacf(mymodel$residuals,nlags) # 2 lags
+
+# checking for number of regular differences
+ndiffs(mymodel$residuals, alpha=0.05, test=c("adf")) # 1 diffference needed     
+
+# save for model
+IBEX <- df$IBEX
+IBEXl <- df$log_ibex
+ExRate <- df$Exchange.rate
+ShortRate <- df$Short.term.rate
+LongRate <- df$Long.term.rate
+
+predictors <- cbind(Exchange.rate = ExRate, 
+                    Short.term.rate = ShortRate,
+                    Long.term.rate = LongRate)
+predictors <- as.data.frame(predictors)
+```
+
+Now we will build our regression model with forecasting errors
+```{r}
+fullmodel = arima(IBEX,order=c(0,1,0),xreg=predictors)
+summary(fullmodel)
+
+# plot the residuals to check for WN
+par(mfrow=c(3,1))
+ts.plot(fullmodel$residuals) # mu = 0, mu = stationary, var = stationary
+acf(fullmodel$residuals,nlags) # no lags
+pacf(fullmodel$residuals,nlags) # no lags
+
+# jsut do Ar[4] to satisfy him
+fullmodel <- arima(IBEX,order=c(4,1,0),xreg=predictors)
+summary(fullmodel)
+
+# now fix the ar3 and Short term rate since it is not significant
+fullmodel <- arima(IBEX,order=c(4,1,0),fixed=c(NA,NA,0,NA,NA,0,NA),xreg=predictors)
+summary(fullmodel)
+
+par(mfrow=c(3,1))
+ts.plot(fullmodel$residuals) # mu = 0, mu = stationary, var = stationary
+acf(fullmodel$residuals,nlags) # no lags
+pacf(fullmodel$residuals,nlags) # no lags
+# this is our model
+
+# to check for WN
+Box.test(fullmodel$residuals,nlags) # WN
+
+# check for GWN
+hist(fullmodel$residuals,prob=T,ylim=c(0,.01),xlim=c(mean(fullmodel$residuals)-3*sd(fullmodel$residuals),mean(fullmodel$residuals)+3*sd(fullmodel$residuals)),col="red")
+lines(density(fullmodel$residuals),lwd=2)
+mu<-mean(fullmodel$residuals)
+sigma<-sd(fullmodel$residuals)
+x<-seq(mu-3*sigma,mu+3*sigma,length=100)
+yy<-dnorm(x,mu,sigma)
+lines(x,yy,lwd=2,col="blue")
+
+# just to confirm
+shapiro.test(fullmodel$residuals) # GWN
+```
+This is our model
+
+
+*Question 4*
+4.	Choose among the three previous models the best one to explain variable "ibex" using the "estimate of the residual variance" as the in-sample criterion
+```{r}
+# compare the residual variance for each model
+cat("mymodel2 residual variance: ", (summary(fullmodel)$sigma)**2)
+cat("mymodel residual variance: ",(summary(mymodel)$sigma)**2)
+```
+
+
+*Question 5*
+5.  For the best model found in question 4, compute the one step ahead point prediction and confidence interval for the “ibex” given the values indicated in the case for all the explanatory variables
+
+Calculate the prediction of the value of IBEX on a date where the long-term interest rates stand at 10.76%, short-term rates at 7.6% and the exchange rate at 0.781 €/$.
+
+```{r one step ahead point prediction}
+# new df with variables to predict
+Exchange.rate = c(0.781)
+Short.term.rate = c(7.6)
+Long.term.rate = c(10.76)
+new_values = cbind(Exchange.rate, Short.term.rate, Long.term.rate)
+
+prediction <- forecast(fullmodel, h=1, xreg=new_values)
+prediction
+```
+
+```{r}
+pd<-rbind(df,prediction)
+
+ggplot(data=pd,aes(x=weeks,y=IBEX))+
+  geom_line(col='red')+
+  geom_line(aes(y=fitted),col='blue')+
+  geom_line(aes(y=forecast))+
+  geom_ribbon(aes(ymin=lo95,ymax=hi95),alpha=.26)+
+  scale_y_continuous(name='Units of Y')
+```
+
+
