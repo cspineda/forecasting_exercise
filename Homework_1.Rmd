@@ -1,0 +1,407 @@
+---
+title: "Forecasting Homework 1"
+author: "Group C"
+date: "1/23/2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages
+
+```{r packages}
+library(fBasics)
+library(forecast)
+library(fUnitRoots)
+library(ggplot2)
+```
+
+Load Data
+
+```{r load data, echo=FALSE}
+hw <- read.csv("/Users/cris/Desktop/Courses/Second Semester/Forecasting/Homework 1/Homework_1_DATA.csv",header=TRUE,sep=";",dec=",")
+```
+
+Setting Series
+
+```{r setting series, echo=FALSE}
+series1=hw[,1] [1:300]
+series2=hw[,2] [1:300] 
+series3=hw[,3] [1:300]
+series4=hw[,4] [1:300]
+series5=hw[,5] [1:2000]
+series6=hw[,6]
+series7=hw[,7]
+```
+
+
+# Series 1 Analysis
+
+```{r Series 1: Checking for WN, echo=FALSE}
+s1 <- series1
+
+par(mfrow=c(3,1))
+ts.plot(s1) # mu = 0, mu and var stationary
+acf(s1) # close to 0, no lags
+pacf(s1) # close to 0, 1 lag in t12
+
+# Ho: uncorrelated data - white noise
+# H1: correlated data
+Box.test (s1, lag = 20, type="Ljung")
+```
+
+Series 1 has a mean equal to 0, is stationary in both the mean and variance, and has an ACF and PACF close to 0. It is WN, next we check for GWN.
+
+
+```{r Series 1: Checking for GWN}
+hist(s1,prob=T,ylim=c(0,0.4),xlim=c(mean(s1)-3*sd(s1),mean(s1)+3*sd(s1)),col="red")
+lines(density(s1),lwd=2)
+mu<-mean(s1)
+sigma<-sd(s1)
+x<-seq(mu-3*sigma,mu+3*sigma,length=100)
+yy<-dnorm(x,mu,sigma)
+lines(x,yy,lwd=2,col="blue")
+# formal normality test
+	# Ho: the data is normally distributed
+	# H1: the data is not normally distributed
+shapiro.test(s1) # p-value = 0.01941
+```
+
+With a p-value of 0.01941, we REJECT that the data is normally distrubuted, meaning we do not have GWN. Next we check for SWN.
+
+```{r Series 1: Checking for SWN}
+par(mfrow=c(3,1))
+ts.plot(s1^2)   
+acf(s1^2)
+pacf(s1^2)
+# formal test for white noise (zero autocorrelations)
+# Ho: uncorrelated data
+# H1: correlated data
+Box.test(s1^2,lag=20, type="Ljung") 
+```
+
+Series 1 is stationary in the mean, but not in the variance. The data is uncorrelated so we cannot tell if it is SWN.
+
+Series 1 finished.
+
+
+# Series 2 Analysis
+
+```{r Series 2: Checking for WN}
+s2 <- series2
+
+par(mfrow=c(3,1))
+ts.plot(s2) # mean != 0, stationary only in variance
+acf(s2) # structured, multiple lags
+pacf(s2) # unstructed
+
+# Ho: uncorrelated data - white noise
+# H1: correlated data
+Box.test(s2, lag = 20, type="Ljung")
+
+
+#Checking for normality
+hist(s2,prob=T,ylim=c(0,0.08),xlim=c(mean(s2)-3*sd(s2),mean(s2)+3*sd(s2)),col="red")
+lines(density(s2),lwd=2)
+mu2<-mean(s2)
+sigma2<-sd(s2)
+x2<-seq(mu2-3*sigma2,mu2+3*sigma2,length=100)
+yy2<-dnorm(x2,mu2,sigma2)
+lines(x2,yy2,lwd=2,col="blue")
+
+# shapiro test
+shapiro.test(s2)
+```
+
+Series 2 does not have a mean equal to 0, is not stationary in the mean, but stationary in the variance. ACF is structued and will require a linear model, PCF is unstructured. Next, we will transform the mean.
+
+```{r Series 2: Transforming the mean}
+d=1
+z2<-diff(s2,d)
+
+par(mfrow=c(3,1))
+ts.plot(z2) # mu = 0, mu and var stationary 
+acf(z2) # unstructured
+pacf(z2) # unstructured
+
+# Ho: uncorrelated data - white noise
+# H1: correlated data
+Box.test(z2, lag = 20, type="Ljung")
+```
+
+The transformed Series 2 now has a mean equal to 0, stationary in both the mean and the variance, ACF and PCF close to 0. Now we test for GWN.
+
+```{r Series 2: Testing for GWN}
+hist(z2,prob=T,ylim=c(0,0.6),xlim=c(mean(z2)-3*sd(z2),mean(z2)+3*sd(y)),col="red")
+lines(density(z2),lwd=2)
+mu2<-mean(z2)
+sigma2<-sd(z2)
+x2<-seq(mu2-3*sigma2,mu2+3*sigma2,length=100)
+yy2<-dnorm(x2,mu2,sigma2)
+lines(x2,yy2,lwd=2,col="blue")
+# formal normality test
+	# Ho: the data is normally distributed
+	# H1: the data is not normally distributed
+shapiro.test(z2) # p-value = 0.69
+```
+
+With a p-value of .69, we DO NOT reject that Series 2 is normally distributed, making it GWN. We cannot predict.
+
+Series 2 finished.
+
+
+# Series 3 Analysis
+
+```{r Series 3: Checking for WN}
+s3 <- series3
+
+par(mfrow=c(3,1))
+ts.plot(s3) # mu !0, mean not stationary, var is stationary
+acf(s3) # structured, multiple lags
+pacf(s3) # 1 lag
+
+#Checking for normality
+hist(s3,prob=T,ylim=c(0,0.05),xlim=c(mean(s3)-3*sd(s3),mean(s3)+3*sd(s3)),col="red")
+lines(density(s3),lwd=2)
+mu3<-mean(s3)
+sigma3<-sd(s3)
+x3<-seq(mu3-3*sigma3,mu3+3*sigma3,length=100)
+yy3<-dnorm(x3,mu3,sigma3)
+lines(x3,yy3,lwd=2,col="blue")
+
+# shapiro test
+shapiro.test(s3)
+```
+
+Series 3 does not have a mean equal to 0, is not stationary in the mean but is stationary in the variance, and the ACF and PACF are structured. It is not WN and will require a linear model. Next we will transform the mean.
+
+```{r Series 3: Transforming the mean}
+d=1
+z3 <- diff(s3,d)
+
+par(mfrow=c(3,1))
+ts.plot(z3) # mu = 0, mu and var stationary 
+acf(z3) # structured
+pacf(z3) # unstructured
+
+#Checking for normality
+hist(z3,prob=T,ylim=c(0,0.5),xlim=c(mean(z3)-3*sd(z3),mean(z3)+3*sd(z3)),col="red")
+lines(density(z3),lwd=2)
+mu3z<-mean(z3)
+sigma3z<-sd(z3)
+x3z<-seq(mu3z-3*sigma3z,mu3z+3*sigma3z,length=100)
+yy3z<-dnorm(x3z,mu3z,sigma3z)
+lines(x3z,yy3z,lwd=2,col="blue")
+
+# shapiro test
+shapiro.test(z3)
+```
+
+The transformed Series 3 has a mean equal to 0, is stationary in both the mean but not in the variance. The ACF is structured and PACF is unstructued. It is not WN and will need a linear model.
+
+Series 3 finished.
+
+
+# Series 4 Analysis
+
+```{r Series 4: Checking for WN}
+s4 <- series4
+
+par(mfrow=c(3,1))
+ts.plot(s4) # mu != 0, mu and var not stationary
+acf(s4) # structured
+pacf(s4) # not structured
+
+#Checking for normality
+hist(s4,prob=T,ylim=c(0,0.0005),xlim=c(mean(s4)-3*sd(s4),mean(s4)+3*sd(s4)),col="red")
+lines(density(s4),lwd=2)
+mu4<-mean(s4)
+sigma4<-sd(s4)
+x4<-seq(mu4-3*sigma4,mu4+3*sigma4,length=100)
+yy4<-dnorm(x4,mu4,sigma4)
+lines(x4,yy4,lwd=2,col="blue")
+
+# shapiro test
+shapiro.test(s4)
+```
+
+Series 4 does not have a mean equal to 0, is not stationary in both the mean and variance. The ACF is structured and the PACF is unstructured. We will need a linear model and will need to transform the mean.
+
+```{r Series 4: Transforming the mean}
+d=1
+z4 <- diff(s4,d)
+
+par(mfrow=c(3,1))
+ts.plot(z4) # mu !0, mu and var not stationary
+acf(z4) # structured
+pacf(z4) # structured 
+
+#Checking for normality
+hist(z4,prob=T,ylim=c(0,0.05),xlim=c(mean(z4)-3*sd(z4),mean(z4)+3*sd(z4)),col="red")
+lines(density(z4),lwd=2)
+mu4z<-mean(z4)
+sigma4z<-sd(z4)
+x4z<-seq(mu4-3*sigma4,mu4+3*sigma4,length=100)
+yy4z<-dnorm(x4z,mu4z,sigma4z)
+lines(x4z,yy4z,lwd=2,col="blue")
+
+# shapiro test
+shapiro.test(z4)
+```
+
+The transformed Series 4 still needs to be transformed.
+
+```{r Series 4: Transforming the mean again}
+d=1
+z4z <- diff(z4,d)
+
+par(mfrow=c(3,1))
+ts.plot(z4z) # mu = 0, mu and var are stationary
+acf(z4z) # structured
+pacf(z4z) # unstructued
+
+# shapiro test
+shapiro.test(z4z)
+```
+
+The newly transformed Series 4 now has a mean equal to 0, is stationary in both the mean and variance. The ACF is structured and the PACF is unstructued. It will require a linear model.
+
+Series 4 finished.
+
+
+# Series 5 Analysis
+
+```{r Series 5: Checking for WN}
+s5 <- series5
+
+par(mfrow=c(3,1))
+ts.plot(s5) # mu = 0, mu stationary, var not stationary
+acf(s5) # unstructured
+pacf(s5) # unstructued
+
+# Ho: uncorrelated data - white noise
+# H1: correlated data
+Box.test(s5, lag = 20, type="Ljung")
+```
+
+Series 5 has a mean equal to 0, is stationary in the mean but not in the variance. ACF and PACF are unstructured. With a p-value of 0.03248, we REJECT that it is WN.
+
+Series 5 finished.
+
+
+# Series 6 Analysis
+
+```{r Series 6: Checking for WN}
+s6 <- series6
+
+par(mfrow=c(3,1))
+ts.plot(s6) # mu = 0, mu stationary, var not stationary
+acf(s6) # structured
+pacf(s6) # not structued
+
+# testing for normality
+hist(s6,prob=T,ylim=c(0,0.7),xlim=c(mean(s6)-3*sd(s6),mean(s6)+3*sd(s6)),col="red")
+lines(density(s6),lwd=2)
+mu6 <- mean(s6)
+sigma6 <- sd(s6)
+x6 <- seq(mu6-3*sigma6,mu6+3*sigma6,length=100)
+yy6 <- dnorm(x6,mu6,sigma6)
+lines(x6,yy6,lwd=2,col="blue")
+# formal normality test
+	# Ho: the data is normally distributed
+	# H1: the data is not normally distributed
+shapiro.test(s6)
+```
+
+Series 6 the mean is equal to 0, the mean is stationary but the variance is not. The ACF and PCF are structued, so it will require a linear model.
+
+Series 6 finished.
+
+
+# Series 7 Analysis
+
+```{r Series 7: Checking for WN}
+s7 <- series7
+
+par(mfrow=c(3,1))
+ts.plot(s7) # mu != 0, mu not stationary, var stationary
+acf(s7) # structured
+pacf(s7) # structured
+
+# Ho: uncorrelated data - white noise
+# H1: correlated data
+Box.test(s7, lag = 20, type="Ljung")
+
+# testing for normality
+hist(s7,prob=T,ylim=c(0,0.05),xlim=c(mean(s7)-3*sd(s7),mean(s7)+3*sd(s7)),col="red")
+lines(density(s7),lwd=2)
+mu7 <- mean(s7)
+sigma7 <- sd(s7)
+x7 <- seq(mu7-3*sigma7,mu7+3*sigma7,length=100)
+yy7 <- dnorm(x7,mu7,sigma7)
+lines(x7,yy7,lwd=2,col="blue")
+# formal normality test
+	# Ho: the data is normally distributed
+	# H1: the data is not normally distributed
+shapiro.test(s7) # p-value < 2.2e-16
+```
+
+Series 7 does not have a mean equal to 0, its mean is not stationary but its variance is. The ACF and PACF are structured so a linear model will be needed. Next, we will need to transform the mean.
+
+```{r Series 7: Transforming the Mean}
+d = 1
+z7 = diff(s7,d)
+par(mfrow = c(3,1))
+ts.plot(z7) # mu = 0, mu stationary, var not stationary
+acf(z7) # not structured
+pacf(z7) # not structured
+
+
+hist(z7,prob=T,ylim=c(0,.7),xlim=c(mean(z7)-3*sd(z7),mean(z7)+3*sd(z7)),col="red")
+lines(density(z7),lwd=2)
+mu7z <- mean(z7)
+sigma7z <- sd(z7)
+x7z <- seq(mu7z-3*sigma7z,mu7z+3*sigma7z,length=100)
+yy7z <- dnorm(x7z,mu7z,sigma7z)
+lines(x7z,yy7z,lwd=2,col="blue")
+# Ho: uncorrelated data - white noise
+# H1: correlated data
+Box.test(z7, lag = 20, type="Ljung")
+```
+
+The transformed Series 7 has a mean equal to 0, it is stationary in the mean but not in the variance. The ACF and PCF are not structured, so it is WN. Next, we test for GWN.
+
+```{r Series 7: Testing for GWN}
+hist(z7,prob=T,ylim=c(0,0.7),xlim=c(mean(z7)-3*sd(z7),mean(z7)+3*sd(z7)),col="red")
+lines(density(z7),lwd=2)
+mu7 <- mean(z7)
+sigma7 <- sd(z7)
+x7 <- seq(mu7-3*sigma7,mu7+3*sigma5,length=100)
+yy7 <- dnorm(x7,mu7,sigma7)
+lines(x7,yy7,lwd=2,col="blue")
+# formal normality test
+	# Ho: the data is normally distributed
+	# H1: the data is not normally distributed
+shapiro.test(z7) # p-value < 2.2e-16
+```
+
+With a p-value less than 2.2e-16, we can REJECT that the data is normally distributed. We now test for SWN.
+
+```{r Series 7: Checking for SWN}
+par(mfrow=c(3,1))
+ts.plot(z7^2) # mu = 0, stationary in mean but not variance  
+acf(z7^2) # structured
+pacf(z7^2) # structured
+# formal test for white noise (zero autocorrelations)
+# Ho: uncorrelated data
+# H1: correlated data
+Box.test(z7^2,lag=20, type="Ljung")    # Null: ro1=…=ro20=0
+```
+
+1It is stationary in the mean but not in the variance, but there is structure in the ACF and PCF, so it is not SWN. We will need a non-linear model.
+
+Series 7 finished.
